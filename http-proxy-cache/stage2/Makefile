@@ -5,16 +5,18 @@ CXXFLAGS = -std=c++17 -Wall -Wextra
 
 # 比第一阶段多了一个 lru_cache.o
 PROXY_OBJS = proxy_server.o proxy_handler.o lru_cache.o \
-             http_parser.o url_parser.o socket_util.o
+             filter.o file_logger.o http_parser.o url_parser.o socket_util.o
 
 all: proxy_server test_target
 
 proxy_server: $(PROXY_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-proxy_server.o: proxy_server.cpp socket_util.h proxy_handler.h
-proxy_handler.o: proxy_handler.cpp proxy_handler.h common.h http_parser.h url_parser.h socket_util.h lru_cache.h
-lru_cache.o: lru_cache.cpp lru_cache.h
+proxy_server.o: proxy_server.cpp socket_util.h proxy_handler.h lru_cache.h filter.h file_logger.h
+proxy_handler.o: proxy_handler.cpp proxy_handler.h common.h http_parser.h url_parser.h socket_util.h cache_interface.h filter.h logger_interface.h
+filter.o: filter.cpp filter.h
+file_logger.o: file_logger.cpp file_logger.h logger_interface.h
+lru_cache.o: lru_cache.cpp lru_cache.h cache_interface.h
 http_parser.o: http_parser.cpp http_parser.h common.h
 url_parser.o: url_parser.cpp url_parser.h common.h
 socket_util.o: socket_util.cpp socket_util.h

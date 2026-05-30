@@ -8,11 +8,12 @@
 
 #pragma once
 
+#include "cache_interface.h"
 #include <string>
 #include <list>
 #include <unordered_map>
 
-class LruCache {
+class LruCache : public CacheInterface {
 public:
     // capacity: 最多缓存多少条响应
     explicit LruCache(size_t capacity);

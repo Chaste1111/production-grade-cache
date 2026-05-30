@@ -1,10 +1,11 @@
 /*
- * proxy_handler.cpp — 代理核心逻辑（第二阶段：带LRU缓存）
+ * proxy_handler.cpp — 代理核心逻辑（第二阶段：带LRU缓存+黑白名单）
  *
- * 流程变化：
- *   收到请求 → 先查缓存
- *     ├─ 命中：直接返回缓存数据（不连目标服务器）
- *     └─ 未命中：走完整链路（连目标→转发→收响应→存缓存→返回）
+ * 流程：
+ *   收到请求 → 查黑白名单 → 查缓存
+ *     ├─ 黑名单命中 → 403 拒绝
+ *     ├─ 缓存命中 → 直接返回
+ *     └─ 未命中 → 连目标→转发→收响应→存缓存→返回
  */
 
 #include "proxy_handler.h"
@@ -12,16 +13,24 @@
 #include "http_parser.h"
 #include "url_parser.h"
 #include "socket_util.h"
-#include "lru_cache.h"
+#include "cache_interface.h"
+#include "filter.h"
+#include "logger_interface.h"
 
 #include <iostream>
 #include <sstream>
 #include <unistd.h>
 using namespace std;
 
-// ---- 全局缓存实例 ----
-// 容量 100 条，所有代理请求共享这一个缓存
-static LruCache g_cache(100);
+// ---- 全局缓存 / 过滤实例 ----
+// 由 proxy_server.cpp 在启动时通过 set_*() 注入
+static CacheInterface*  g_cache  = nullptr;
+static Filter*         g_filter = nullptr;
+static LoggerInterface* g_logger = nullptr;
+
+void set_cache(CacheInterface* cache)  { g_cache = cache; }
+void set_filter(Filter* filter)        { g_filter = filter; }
+void set_logger(LoggerInterface* logger) { g_logger = logger; }
 
 // 统计用
 static int g_hit_count  = 0;  // 命中次数
@@ -90,15 +99,28 @@ void handle_proxy_request(int browser_fd) {
     // [步骤3] 解析URL
     UrlInfo info = parse_url(req.url);
 
-    // ========== 第二阶段新增：查缓存 ==========
+    // ========== 黑白名单检查（在缓存之前） ==========
+    if (g_filter && !g_filter->is_allowed(info.host)) {
+        cerr << "[代理] 403 拒绝访问: " << info.host << endl;
+        string deny = "HTTP/1.1 403 Forbidden\r\n"
+                      "Content-Type: text/plain\r\n"
+                      "Connection: close\r\n\r\n"
+                      "Proxy: access denied by filter\r\n";
+        write(browser_fd, deny.c_str(), deny.size());
+        if (g_logger) g_logger->log(req.url, req.method, "DENIED", deny.size());
+        return;
+    }
+
+    // ========== 查缓存 ==========
 
     string cached_response;
-    if (g_cache.get(req.url, cached_response)) {
+    if (g_cache->get(req.url, cached_response)) {
         // 命中！直接返回，不需要连目标服务器
         g_hit_count++;
         cout << "[代理] ★ 缓存命中 ★ " << req.url
              << " (命中率: " << cache_hit_rate() << "%)" << endl;
         write(browser_fd, cached_response.c_str(), cached_response.size());
+        if (g_logger) g_logger->log(req.url, req.method, "HIT", cached_response.size());
         return;  // ← 直接返回，下面的连目标、转发代码都不执行
     }
 
@@ -125,10 +147,11 @@ void handle_proxy_request(int browser_fd) {
     close(target_fd);
 
     // [步骤7] 存入缓存
-    g_cache.put(req.url, response);
+    g_cache->put(req.url, response);
     cout << "[代理] 已缓存 " << req.url
-         << " (缓存条数: " << g_cache.size() << "/" << g_cache.capacity() << ")" << endl;
+         << " (缓存条数: " << g_cache->size() << "/" << g_cache->capacity() << ")" << endl;
 
     // [步骤8] 回传给浏览器
     write(browser_fd, response.c_str(), response.size());
+    if (g_logger) g_logger->log(req.url, req.method, "MISS", response.size());
 }
