@@ -32,6 +32,8 @@ void set_cache(CacheInterface* cache)  { g_cache = cache; }
 void set_filter(Filter* filter)        { g_filter = filter; }
 void set_logger(LoggerInterface* logger) { g_logger = logger; }
 
+CacheInterface* get_cache() { return g_cache; }
+
 // 统计用
 static int g_hit_count  = 0;  // 命中次数
 static int g_miss_count = 0;  // 未命中次数

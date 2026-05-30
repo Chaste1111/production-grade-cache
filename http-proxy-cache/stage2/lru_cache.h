@@ -28,8 +28,9 @@ public:
     bool contains(const std::string& url) const;
 
     // 统计信息
-    size_t size() const;      // 当前条数
-    size_t capacity() const;  // 容量上限
+    size_t size() const;                      // 当前条数
+    size_t capacity() const;                  // 容量上限
+    std::vector<std::string> all_urls() const; // 列出所有URL
 
 private:
     // 链表的每个节点存 (url, 响应内容)

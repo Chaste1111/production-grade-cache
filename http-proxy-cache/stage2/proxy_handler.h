@@ -16,6 +16,8 @@ void set_cache(CacheInterface* cache);
 void set_filter(Filter* filter);
 void set_logger(LoggerInterface* logger);
 
+CacheInterface* get_cache();  // 给统计面板用
+
 // 缓存统计
 int cache_hit_count();
 int cache_miss_count();

@@ -61,3 +61,11 @@ void LruCache::evict() {
     map_.erase(back.first);  // 从哈希表删掉
     list_.pop_back();         // 从链表删掉
 }
+
+std::vector<std::string> LruCache::all_urls() const {
+    std::vector<std::string> urls;
+    // 链表头部=最近使用的，从新到旧遍历
+    for (const auto& item : list_)
+        urls.push_back(item.first);  // item.first = URL
+    return urls;
+}
