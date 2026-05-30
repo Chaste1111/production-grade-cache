@@ -27,18 +27,58 @@ using namespace std;
 
 static time_t g_start_time;
 
+// 读日志最后 N 行
+static string read_last_lines(const string& path, int n) {
+    ifstream f(path);
+    if (!f) return "无";
+    vector<string> lines; string l;
+    while (getline(f, l)) lines.push_back(l);
+    int s = max(0, (int)lines.size() - n);
+    string r;
+    for (int i = s; i < (int)lines.size(); i++) r += lines[i] + "\n";
+    return r.empty() ? "暂无" : r;
+}
+
 // ==== 统计面板 ====
 static void handle_stats(int client_fd) {
+    CacheInterface* cache = get_cache();
+
     ostringstream html;
     html << "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
          << "Connection: close\r\n\r\n"
          << "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"UTF-8\">"
          << "<meta http-equiv=\"refresh\" content=\"3\">"
-         << "<title>代理面板 (epoll)</title></head><body>"
+         << "<style>body{font-family:Arial;max-width:700px;margin:20px auto;"
+            "background:#f5f5f5}.card{background:#fff;border-radius:8px;"
+            "padding:16px;margin-bottom:12px}h2{font-size:16px;margin:0 0 8px}"
+            "pre{background:#fafafa;padding:10px;font-size:12px;max-height:300px;"
+            "overflow:auto}li{font-size:13px}</style>"
+         << "<title>代理面板 (Stage3)</title></head><body>"
          << "<h1>📊 HTTP代理 (Stage3 — epoll)</h1>"
-         << "<p>启动: " << ctime(&g_start_time) << "</p>"
-         << "<p>端口: 8888(代理) | 8890(面板)</p>"
-         << "<p><b>状态:</b> 事件驱动 | 非阻塞IO | epoll</p>"
+
+         << "<div class=\"card\"><h2>运行状态</h2>"
+         << "启动: " << ctime(&g_start_time)
+         << "端口: 8888(代理) | 8890(面板)<br>"
+         << "架构: epoll非阻塞 + 7状态机 | TTL: 300s</div>"
+
+         << "<div class=\"card\"><h2>缓存状态</h2>";
+
+    if (cache) {
+        html << "已缓存: <b>" << cache->size() << " / " << cache->capacity()
+             << "</b> 条<br>";
+        auto urls = cache->all_urls();
+        if (!urls.empty()) {
+            html << "<ul>";
+            for (int i = 0; i < min(10, (int)urls.size()); i++)
+                html << "<li>" << urls[i] << "</li>";
+            if (urls.size() > 10) html << "<li>… 共 " << urls.size() << " 条</li>";
+            html << "</ul>";
+        }
+    } else { html << "缓存未启用"; }
+    html << "</div>"
+
+         << "<div class=\"card\"><h2>📋 最近日志</h2><pre>"
+         << read_last_lines("proxy_access.log", 15) << "</pre></div>"
          << "</body></html>";
 
     string page = html.str();

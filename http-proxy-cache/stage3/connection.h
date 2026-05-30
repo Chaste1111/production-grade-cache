@@ -69,3 +69,5 @@ void set_cache(CacheInterface* c);
 void set_filter(Filter* f);
 void set_logger(LoggerInterface* l);
 void set_header_mod(HeaderMod* h);
+
+CacheInterface* get_cache();  // 给面板用

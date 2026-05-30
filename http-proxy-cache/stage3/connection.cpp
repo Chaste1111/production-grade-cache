@@ -35,6 +35,8 @@ void set_filter(Filter* f)            { g_filter = f; }
 void set_logger(LoggerInterface* l)   { g_logger = l; }
 void set_header_mod(HeaderMod* h)     { g_header_mod = h; }
 
+CacheInterface* get_cache() { return g_cache; }
+
 // ==== 前向声明 ====
 static void handle_read_request(Connection* c, Epoller* ep);
 static void handle_checking(Connection* c, Epoller* ep);
@@ -206,6 +208,21 @@ static void handle_connecting(Connection* c, Epoller* ep) {
                          "Host: " + c->host);
     }
 
+    // 替换 Connection 头为 close（我们暂不支持 Keep-Alive）
+    size_t conn_pos = modified.find("Connection: ");
+    size_t conn_end = modified.find("\r\n", conn_pos);
+    if (conn_pos != string::npos && conn_end != string::npos) {
+        modified.replace(conn_pos, conn_end - conn_pos,
+                         "Connection: close");
+    }
+    // 也替换 Proxy-Connection
+    size_t pconn_pos = modified.find("Proxy-Connection: ");
+    size_t pconn_end = modified.find("\r\n", pconn_pos);
+    if (pconn_pos != string::npos && pconn_end != string::npos) {
+        modified.replace(pconn_pos, pconn_end - pconn_pos,
+                         "Connection: close");
+    }
+
     c->out_buf = modified;  c->write_offset = 0;
     c->state = State::FORWARD;
     ep->mod(c->target_fd, EPOLLOUT, c);
@@ -237,9 +254,12 @@ static void handle_forward(Connection* c, Epoller* ep) {
 // ============================================================
 static void handle_read_response(Connection* c, Epoller* ep) {
     char buf[8192];
-    ssize_t n = read(c->target_fd, buf, sizeof(buf));
+    ssize_t n;
 
-    if (n > 0) { c->out_buf.append(buf, n); return; }  // 还有更多
+    // 循环读，直到内核缓冲区空（非阻塞下一次性读完所有可用的数据）
+    while ((n = read(c->target_fd, buf, sizeof(buf))) > 0) {
+        c->out_buf.append(buf, n);
+    }
 
     if (n == 0 || (n < 0 && errno != EAGAIN)) {
         // 目标关连接 = 收完了
