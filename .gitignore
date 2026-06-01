@@ -1,0 +1,23 @@
+# === 编译产物 ===
+target/
+*.class
+*.jar
+*.war
+
+# === 日志 ===
+*.log
+logs/
+
+# === IDE ===
+.idea/
+*.iml
+.vscode/
+
+# === 运行时数据 ===
+dump.rdb
+*.rdb
+
+# === 敏感文件 ===
+*.key
+*.pem
+src/main/resources/application-prod.yml
